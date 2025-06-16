@@ -1,0 +1,68 @@
+{
+  "bot": {
+    "token": "MTM4NDA3NjIzOTU0Mjk0NzkyOA.Gk7wSG.BOTv1dfog8MAPMuMb-BD5jTHU5NKK0l-pqZAeE",
+    "guildId": "1322641885436837958"
+  },
+  "channels": {
+    "categoryId": "1384076702522671144",
+    "logChannelId": "1384077907567181874", 
+    "ticketChannelId": "1384077246603460679"
+  },
+  "roles": {
+    "supportRoleId": "1328709487887913021",
+    "moderatorRoleId": "1328709487887913021"
+  },
+  "settings": {
+    "enableSchedule": false,
+    "allowedHours": {
+      "start": 9,
+      "end": 12
+    },
+    "maxTicketsPerUser": 1,
+    "deleteChannelDelay": 5000,
+    "timezone": "America/Mexico_City",
+    "autoCloseAfterDays": 7,
+    "enableStatistics": true,
+    "enableNotifications": true
+  },
+  "messages": {
+    "ticketCreated": "✅ Tu ticket ha sido creado exitosamente.",
+    "ticketClosed": "🔒 Tu ticket ha sido cerrado.",
+    "outsideHours": "❌ Los tickets solo se pueden crear entre las {start}:00 y {end}:00.",
+    "alreadyHasTicket": "❌ Ya tienes un ticket abierto.",
+    "noPermissions": "❌ No tienes permisos para realizar esta acción.",
+    "userNotFound": "❌ Usuario no encontrado.",
+    "errorGeneral": "❌ Ocurrió un error inesperado.",
+    "transcriptSent": "📄 Transcript enviado por DM.",
+    "memberAdded": "✅ Miembro agregado al ticket.",
+    "notificationSent": "🔔 Notificación enviada al usuario."
+  },
+  "embeds": {
+    "colors": {
+      "primary": "#0099ff",
+      "success": "#00ff00", 
+      "warning": "#ffff00",
+      "error": "#ff0000",
+      "info": "#ff9900"
+    },
+    "footer": "Sistema de Tickets v2.0",
+    "enableThumbnails": true,
+    "enableTimestamps": true
+  },
+  "features": {
+    "autoDeleteTranscripts": false,
+    "pingOnTicketCreate": true,
+    "logAllActions": true,
+    "enableRateLimiting": true,
+    "maxTicketsPerHour": 3,
+    "enableWelcomeMessage": true,
+    "enableFeedbackSystem": false
+  },
+  "advanced": {
+    "debugMode": false,
+    "logLevel": "info",
+    "enablePerformanceMonitoring": true,
+    "cacheTimeout": 300000,
+    "maxConcurrentTickets": 50
+  }
+}
