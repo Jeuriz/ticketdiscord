@@ -1,16 +1,19 @@
 {
   "bot": {
     "token": "token",
-    "guildId": "1322641885436837958"
+       "guildId": "1322641885436837958"
   },
   "channels": {
     "categoryId": "1384076702522671144",
     "logChannelId": "1384077907567181874", 
-    "ticketChannelId": "1384077246603460679"
+    "ticketChannelId": "1384077246603460679",
+    "donationsCategoryId": "1384355167717036093",
+    "donationsChannelId": "1384355233387515984"
   },
   "roles": {
     "supportRoleId": "1328709487887913021",
-    "moderatorRoleId": "1328709487887913021"
+    "moderatorRoleId": "1328709487887913021",
+    "foundersRoleId": "1328709487887913021"
   },
   "settings": {
     "enableSchedule": false,
@@ -19,6 +22,7 @@
       "end": 12
     },
     "maxTicketsPerUser": 1,
+    "maxDonationTicketsPerUser": 1,
     "deleteChannelDelay": 5000,
     "timezone": "America/Mexico_City",
     "autoCloseAfterDays": 7,
@@ -27,9 +31,12 @@
   },
   "messages": {
     "ticketCreated": "✅ Tu ticket ha sido creado exitosamente.",
+    "donationTicketCreated": "✅ Tu ticket de donación ha sido creado exitosamente.",
     "ticketClosed": "🔒 Tu ticket ha sido cerrado.",
+    "donationTicketClosed": "🔒 Tu ticket de donación ha sido cerrado.",
     "outsideHours": "❌ Los tickets solo se pueden crear entre las {start}:00 y {end}:00.",
     "alreadyHasTicket": "❌ Ya tienes un ticket abierto.",
+    "alreadyHasDonationTicket": "❌ Ya tienes un ticket de donación abierto.",
     "noPermissions": "❌ No tienes permisos para realizar esta acción.",
     "userNotFound": "❌ Usuario no encontrado.",
     "errorGeneral": "❌ Ocurrió un error inesperado.",
@@ -43,7 +50,8 @@
       "success": "#00ff00", 
       "warning": "#ffff00",
       "error": "#ff0000",
-      "info": "#ff9900"
+      "info": "#ff9900",
+      "donation": "#FFD700"
     },
     "footer": "Sistema de Tickets v2.0",
     "enableThumbnails": true,
@@ -56,7 +64,8 @@
     "enableRateLimiting": true,
     "maxTicketsPerHour": 3,
     "enableWelcomeMessage": true,
-    "enableFeedbackSystem": false
+    "enableFeedbackSystem": false,
+    "enableDonationSystem": true
   },
   "advanced": {
     "debugMode": false,
