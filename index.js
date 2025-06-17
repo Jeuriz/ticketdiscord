@@ -43,14 +43,16 @@ const client = new Client({
     ]
 });
 
-// Base de datos simple para tickets (en producción usar una BD real)
+// Base de datos simple para tickets y verificaciones (en producción usar una BD real)
 let ticketsDB = {};
 let donationTicketsDB = {};
+let verificationsDB = {};
 const dbPath = join(__dirname, 'tickets.json');
 const donationDbPath = join(__dirname, 'donation_tickets.json');
+const verificationsDbPath = join(__dirname, 'verifications.json');
 
-// Cargar tickets existentes
-function loadTickets() {
+// Cargar datos existentes
+function loadData() {
     try {
         if (existsSync(dbPath)) {
             ticketsDB = JSON.parse(readFileSync(dbPath, 'utf8'));
@@ -58,21 +60,36 @@ function loadTickets() {
         if (existsSync(donationDbPath)) {
             donationTicketsDB = JSON.parse(readFileSync(donationDbPath, 'utf8'));
         }
+        if (existsSync(verificationsDbPath)) {
+            verificationsDB = JSON.parse(readFileSync(verificationsDbPath, 'utf8'));
+        }
     } catch (error) {
-        console.error('Error cargando tickets:', error);
+        console.error('Error cargando datos:', error);
         ticketsDB = {};
         donationTicketsDB = {};
+        verificationsDB = {};
     }
 }
 
-// Guardar tickets
-function saveTickets() {
+// Guardar datos
+function saveData() {
     try {
         writeFileSync(dbPath, JSON.stringify(ticketsDB, null, 2));
         writeFileSync(donationDbPath, JSON.stringify(donationTicketsDB, null, 2));
+        writeFileSync(verificationsDbPath, JSON.stringify(verificationsDB, null, 2));
     } catch (error) {
-        console.error('Error guardando tickets:', error);
+        console.error('Error guardando datos:', error);
     }
+}
+
+// Función para compatibilidad con código existente
+function saveTickets() {
+    saveData();
+}
+
+// Función para compatibilidad con código existente
+function loadTickets() {
+    loadData();
 }
 
 // Verificar si está en horario permitido
@@ -196,6 +213,43 @@ function createDonationEmbed() {
         .setTimestamp();
 }
 
+// Crear embed de verificación
+function createVerificationEmbed() {
+    return new EmbedBuilder()
+        .setColor(config.embeds.colors.verification)
+        .setTitle('✅ Verificación LastWayZ Roleplay')
+        .setDescription(
+            '¡Bienvenido a **LastWayZ Roleplay**!\n' +
+            'Para acceder al servidor completo, debes verificarte.\n\n' +
+            '🔐 *Haz clic en el botón de abajo para verificarte.*'
+        )
+        .addFields([
+            { 
+                name: '🎯 ¿Por qué verificarse?', 
+                value: 'Ayuda a mantener el servidor seguro y libre de spam', 
+                inline: true 
+            },
+            { 
+                name: '🚀 Beneficios', 
+                value: 'Acceso completo a todos los canales del servidor', 
+                inline: true 
+            },
+            {
+                name: '⚡ Proceso Rápido',
+                value: 'Solo toma unos segundos completar la verificación',
+                inline: false
+            },
+            {
+                name: '📋 Instrucciones',
+                value: '1️⃣ Haz clic en **Verificarme**\n2️⃣ Espera la confirmación\n3️⃣ ¡Listo! Ya puedes acceder al servidor',
+                inline: false
+            }
+        ])
+        .setImage('https://i.ibb.co/hRzqM2W/verification.png')
+        .setFooter({ text: '🔐 LastWayZ - Sistema de Verificación v2.0', iconURL: 'https://i.imgur.com/T1cZX1x.png' })
+        .setTimestamp();
+}
+
 // Crear botones para el ticket normal
 function createTicketButtons() {
     return new ActionRowBuilder()
@@ -217,6 +271,18 @@ function createDonationButtons() {
                 .setLabel('Solicitar Donación')
                 .setStyle(ButtonStyle.Success)
                 .setEmoji('💎')
+        );
+}
+
+// Crear botones para verificación
+function createVerificationButtons() {
+    return new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('verify_user')
+                .setLabel('Verificarme')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('✅')
         );
 }
 
@@ -277,6 +343,11 @@ function isFounder(member) {
            member.permissions.has(PermissionFlagsBits.Administrator);
 }
 
+// Verificar si un usuario ya está verificado
+function isVerified(member) {
+    return member.roles.cache.has(config.roles.verifiedRoleId);
+}
+
 // Registrar comandos slash
 async function registerSlashCommands() {
     const commands = [
@@ -291,6 +362,11 @@ async function registerSlashCommands() {
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         
         new SlashCommandBuilder()
+            .setName('setup-verification')
+            .setDescription('Configura el sistema de verificación de usuarios')
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        
+        new SlashCommandBuilder()
             .setName('force-close')
             .setDescription('Fuerza el cierre de un ticket')
             .addChannelOption(option =>
@@ -301,7 +377,7 @@ async function registerSlashCommands() {
 
         new SlashCommandBuilder()
             .setName('ticket-stats')
-            .setDescription('Muestra estadísticas de tickets')
+            .setDescription('Muestra estadísticas de tickets y verificaciones')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
             
         new SlashCommandBuilder()
@@ -311,7 +387,16 @@ async function registerSlashCommands() {
                 option.setName('enabled')
                     .setDescription('true = activar horarios, false = desactivar (24/7)')
                     .setRequired(true))
-            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+        new SlashCommandBuilder()
+            .setName('verify-user')
+            .setDescription('Verifica manualmente a un usuario (solo staff)')
+            .addUserOption(option =>
+                option.setName('usuario')
+                    .setDescription('Usuario a verificar')
+                    .setRequired(true))
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
     ];
     
     const rest = new REST().setToken(config.bot.token);
@@ -335,12 +420,12 @@ client.once('ready', async () => {
     console.log(`📊 Conectado a ${client.guilds.cache.size} servidor(es)`);
     console.log(`👥 Sirviendo a ${client.users.cache.size} usuarios`);
     
-    loadTickets();
+    loadData();
     await registerSlashCommands();
     
     // Establecer presencia del bot
     client.user.setPresence({
-        activities: [{ name: 'tickets de soporte 🎫', type: 3 }],
+        activities: [{ name: 'tickets y verificaciones 🎫', type: 3 }],
         status: 'online'
     });
 });
@@ -357,17 +442,33 @@ client.on('interactionCreate', async (interaction) => {
     } catch (error) {
         console.error('Error manejando interacción:', error);
         
-        const errorMessage = 'Hubo un error procesando tu solicitud. Por favor intenta de nuevo.';
-        const errorEmbed = new EmbedBuilder()
-            .setColor(config.embeds.colors.error)
-            .setTitle('❌ Error')
-            .setDescription(errorMessage)
-            .setTimestamp();
-
+        // Verificar si la interacción ya fue respondida o diferida
         if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+            try {
+                const errorEmbed = new EmbedBuilder()
+                    .setColor(config.embeds.colors.error)
+                    .setTitle('❌ Error')
+                    .setDescription('Hubo un error procesando tu solicitud. Por favor intenta de nuevo.')
+                    .setTimestamp();
+
+                await interaction.followUp({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+            } catch (followUpError) {
+                console.error('Error enviando follow-up:', followUpError);
+            }
         } else {
-            await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+            try {
+                const errorEmbed = new EmbedBuilder()
+                    .setColor(config.embeds.colors.error)
+                    .setTitle('❌ Error')
+                    .setDescription('Hubo un error procesando tu solicitud. Por favor intenta de nuevo.')
+                    .setTimestamp();
+
+                await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+            } catch (replyError) {
+                console.error('Error enviando reply:', replyError);
+                // Si no se puede responder, la interacción probablemente ya expiró
+                console.log('La interacción puede haber expirado (más de 3 segundos)');
+            }
         }
     }
 });
@@ -382,6 +483,9 @@ async function handleSlashCommand(interaction) {
         case 'setup-donations':
             await setupDonationsCommand(interaction);
             break;
+        case 'setup-verification':
+            await setupVerificationCommand(interaction);
+            break;
         case 'force-close':
             await forceCloseCommand(interaction);
             break;
@@ -391,10 +495,16 @@ async function handleSlashCommand(interaction) {
         case 'toggle-schedule':
             await toggleScheduleCommand(interaction);
             break;
+        case 'verify-user':
+            await verifyUserCommand(interaction);
+            break;
     }
 }
 
 async function setupTicketsCommand(interaction) {
+    // Defer inmediatamente para evitar timeout
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         const errorEmbed = new EmbedBuilder()
             .setColor(config.embeds.colors.error)
@@ -402,35 +512,50 @@ async function setupTicketsCommand(interaction) {
             .setDescription('No tienes permisos para usar este comando.')
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+        return await interaction.editReply({ embeds: [errorEmbed] });
     }
     
-    const embed = createTicketEmbed();
-    const buttons = createTicketButtons();
-    
-    const channel = client.channels.cache.get(config.channels.ticketChannelId);
-    if (channel) {
-        await channel.send({ embeds: [embed], components: [buttons] });
+    try {
+        const embed = createTicketEmbed();
+        const buttons = createTicketButtons();
         
-        const successEmbed = new EmbedBuilder()
-            .setColor(config.embeds.colors.success)
-            .setTitle('✅ Sistema de Soporte Configurado')
-            .setDescription(`Sistema de tickets de soporte configurado correctamente en ${channel}.`)
-            .setTimestamp();
+        const channel = client.channels.cache.get(config.channels.ticketChannelId);
+        if (channel) {
+            await channel.send({ embeds: [embed], components: [buttons] });
+            
+            const successEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.success)
+                .setTitle('✅ Sistema de Soporte Configurado')
+                .setDescription(`Sistema de tickets de soporte configurado correctamente en ${channel}.`)
+                .setTimestamp();
+            
+            await interaction.editReply({ embeds: [successEmbed] });
+        } else {
+            const errorEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.error)
+                .setTitle('❌ Canal No Encontrado')
+                .setDescription(`No se pudo encontrar el canal con ID: \`${config.channels.ticketChannelId || 'NO_CONFIGURADO'}\``)
+                .setTimestamp();
+            
+            await interaction.editReply({ embeds: [errorEmbed] });
+        }
+    } catch (error) {
+        console.error('Error en setupTicketsCommand:', error);
         
-        await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
-    } else {
         const errorEmbed = new EmbedBuilder()
             .setColor(config.embeds.colors.error)
-            .setTitle('❌ Canal No Encontrado')
-            .setDescription('No se pudo encontrar el canal configurado para tickets de soporte.')
+            .setTitle('❌ Error Inesperado')
+            .setDescription('Ocurrió un error al configurar el sistema de tickets.')
             .setTimestamp();
         
-        await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+        await interaction.editReply({ embeds: [errorEmbed] });
     }
 }
 
 async function setupDonationsCommand(interaction) {
+    // Defer inmediatamente para evitar timeout
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         const errorEmbed = new EmbedBuilder()
             .setColor(config.embeds.colors.error)
@@ -438,35 +563,199 @@ async function setupDonationsCommand(interaction) {
             .setDescription('No tienes permisos para usar este comando.')
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+        return await interaction.editReply({ embeds: [errorEmbed] });
     }
     
-    const embed = createDonationEmbed();
-    const buttons = createDonationButtons();
-    
-    const channel = client.channels.cache.get(config.channels.donationsChannelId);
-    if (channel) {
-        await channel.send({ embeds: [embed], components: [buttons] });
+    try {
+        const embed = createDonationEmbed();
+        const buttons = createDonationButtons();
         
-        const successEmbed = new EmbedBuilder()
-            .setColor(config.embeds.colors.success)
-            .setTitle('✅ Sistema de Donaciones Configurado')
-            .setDescription(`Sistema de tickets de donaciones configurado correctamente en ${channel}.`)
+        const channel = client.channels.cache.get(config.channels.donationsChannelId);
+        if (channel) {
+            await channel.send({ embeds: [embed], components: [buttons] });
+            
+            const successEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.success)
+                .setTitle('✅ Sistema de Donaciones Configurado')
+                .setDescription(`Sistema de tickets de donaciones configurado correctamente en ${channel}.`)
+                .addFields([
+                    { name: '👑 Acceso', value: 'Solo fundadores pueden ver estos tickets', inline: true },
+                    { name: '🎯 Propósito', value: 'Exclusivo para consultas de donaciones', inline: true }
+                ])
+                .setTimestamp();
+            
+            await interaction.editReply({ embeds: [successEmbed] });
+        } else {
+            const errorEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.error)
+                .setTitle('❌ Canal No Encontrado')
+                .setDescription(`No se pudo encontrar el canal con ID: \`${config.channels.donationsChannelId || 'NO_CONFIGURADO'}\``)
+                .setTimestamp();
+            
+            await interaction.editReply({ embeds: [errorEmbed] });
+        }
+    } catch (error) {
+        console.error('Error en setupDonationsCommand:', error);
+        
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Error Inesperado')
+            .setDescription('Ocurrió un error al configurar el sistema de donaciones.')
+            .setTimestamp();
+        
+        await interaction.editReply({ embeds: [errorEmbed] });
+    }
+}
+
+async function setupVerificationCommand(interaction) {
+    // Defer inmediatamente para evitar timeout
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Sin Permisos')
+            .setDescription('No tienes permisos para usar este comando.')
+            .setTimestamp();
+        
+        return await interaction.editReply({ embeds: [errorEmbed] });
+    }
+    
+    try {
+        const embed = createVerificationEmbed();
+        const buttons = createVerificationButtons();
+        
+        const channel = client.channels.cache.get(config.channels.verificationChannelId);
+        if (channel) {
+            await channel.send({ embeds: [embed], components: [buttons] });
+            
+            const successEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.verification)
+                .setTitle('✅ Sistema de Verificación Configurado')
+                .setDescription(`Sistema de verificación configurado correctamente en ${channel}.`)
+                .addFields([
+                    { name: '🔐 Función', value: 'Los usuarios pueden verificarse automáticamente', inline: true },
+                    { name: '🎯 Rol', value: `<@&${config.roles.verifiedRoleId}>`, inline: true },
+                    { name: '📊 Logs', value: 'Se registran en el canal de logs', inline: true }
+                ])
+                .setTimestamp();
+            
+            await interaction.editReply({ embeds: [successEmbed] });
+        } else {
+            const errorEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.error)
+                .setTitle('❌ Canal No Encontrado')
+                .setDescription(`No se pudo encontrar el canal con ID: \`${config.channels.verificationChannelId || 'NO_CONFIGURADO'}\`\n\nRevisa el \`verificationChannelId\` en config.json.`)
+                .addFields([
+                    { name: '🔧 Solución', value: '1. Abre config.json\n2. Busca `verificationChannelId`\n3. Reemplaza con el ID correcto del canal', inline: false }
+                ])
+                .setTimestamp();
+            
+            await interaction.editReply({ embeds: [errorEmbed] });
+        }
+    } catch (error) {
+        console.error('Error en setupVerificationCommand:', error);
+        
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Error Inesperado')
+            .setDescription('Ocurrió un error al configurar el sistema de verificación.')
             .addFields([
-                { name: '👑 Acceso', value: 'Solo fundadores pueden ver estos tickets', inline: true },
-                { name: '🎯 Propósito', value: 'Exclusivo para consultas de donaciones', inline: true }
+                { name: '🔧 Solución', value: 'Revisa los logs de la consola y verifica la configuración.', inline: false }
             ])
             .setTimestamp();
         
-        await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
-    } else {
+        await interaction.editReply({ embeds: [errorEmbed] });
+    }
+}
+
+async function verifyUserCommand(interaction) {
+    // Defer inmediatamente para evitar timeout
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    
+    if (!isStaff(interaction.member) && !interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
         const errorEmbed = new EmbedBuilder()
             .setColor(config.embeds.colors.error)
-            .setTitle('❌ Canal No Encontrado')
-            .setDescription('No se pudo encontrar el canal configurado para tickets de donaciones.')
+            .setTitle('❌ Sin Permisos')
+            .setDescription('Solo el staff puede verificar usuarios manualmente.')
             .setTimestamp();
         
-        await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+        return await interaction.editReply({ embeds: [errorEmbed] });
+    }
+    
+    try {
+        const targetUser = interaction.options.getUser('usuario');
+        const targetMember = await interaction.guild.members.fetch(targetUser.id);
+        
+        if (isVerified(targetMember)) {
+            const errorEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.warning)
+                .setTitle('⚠️ Usuario Ya Verificado')
+                .setDescription(`${targetUser.tag} ya está verificado.`)
+                .setTimestamp();
+            
+            return await interaction.editReply({ embeds: [errorEmbed] });
+        }
+        
+        await targetMember.roles.add(config.roles.verifiedRoleId);
+        
+        // Registrar verificación
+        const verificationId = `verification_${Date.now()}`;
+        verificationsDB[verificationId] = {
+            id: verificationId,
+            userId: targetUser.id,
+            verifiedBy: interaction.user.id,
+            method: 'manual',
+            timestamp: new Date().toISOString()
+        };
+        
+        saveData();
+        
+        const successEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.verification)
+            .setTitle('✅ Usuario Verificado Manualmente')
+            .setDescription(`${targetUser.tag} ha sido verificado exitosamente.`)
+            .addFields([
+                { name: 'Usuario', value: `${targetUser.tag} (${targetUser.id})`, inline: true },
+                { name: 'Verificado por', value: interaction.user.tag, inline: true },
+                { name: 'Método', value: 'Manual (Staff)', inline: true }
+            ])
+            .setThumbnail(targetUser.displayAvatarURL())
+            .setTimestamp();
+        
+        await interaction.editReply({ embeds: [successEmbed] });
+        
+        // Log de verificación manual
+        const logChannel = client.channels.cache.get(config.channels.logChannelId);
+        if (logChannel) {
+            const logEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.verification)
+                .setTitle('🔐 Verificación Manual')
+                .addFields([
+                    { name: 'Usuario Verificado', value: `${targetUser.tag} (${targetUser.id})`, inline: true },
+                    { name: 'Verificado por', value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
+                    { name: 'Método', value: 'Comando Manual', inline: true },
+                    { name: 'Hora', value: new Date().toLocaleString(), inline: false }
+                ])
+                .setThumbnail(targetUser.displayAvatarURL())
+                .setTimestamp();
+            
+            await logChannel.send({ embeds: [logEmbed] });
+        }
+        
+    } catch (error) {
+        console.error('Error verificando usuario manualmente:', error);
+        
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Error al Verificar')
+            .setDescription('No se pudo verificar al usuario. Verifica que el bot tenga permisos para asignar roles.')
+            .addFields([
+                { name: '🔧 Posibles Soluciones', value: '• Verifica permisos del bot\n• Revisa jerarquía de roles\n• Asegúrate de que el rol existe', inline: false }
+            ])
+            .setTimestamp();
+        
+        await interaction.editReply({ embeds: [errorEmbed] });
     }
 }
 
@@ -523,6 +812,7 @@ async function ticketStatsCommand(interaction) {
     
     const tickets = Object.values(ticketsDB);
     const donationTickets = Object.values(donationTicketsDB);
+    const verifications = Object.values(verificationsDB);
     
     const openTickets = tickets.filter(ticket => ticket.status === 'open').length;
     const closedTickets = tickets.filter(ticket => ticket.status === 'closed').length;
@@ -532,6 +822,8 @@ async function ticketStatsCommand(interaction) {
     const closedDonationTickets = donationTickets.filter(ticket => ticket.status === 'closed').length;
     const totalDonationTickets = donationTickets.length;
     
+    const totalVerifications = verifications.length;
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const ticketsToday = tickets.filter(ticket => 
@@ -540,10 +832,13 @@ async function ticketStatsCommand(interaction) {
     const donationTicketsToday = donationTickets.filter(ticket => 
         new Date(ticket.createdAt) >= today
     ).length;
+    const verificationsToday = verifications.filter(verification => 
+        new Date(verification.timestamp) >= today
+    ).length;
     
     const statsEmbed = new EmbedBuilder()
         .setColor(config.embeds.colors.info)
-        .setTitle('📊 Estadísticas de Tickets')
+        .setTitle('📊 Estadísticas del Sistema')
         .addFields([
             { name: '🎫 Tickets de Soporte', value: '\u200B', inline: false },
             { name: 'Total', value: totalTickets.toString(), inline: true },
@@ -553,7 +848,11 @@ async function ticketStatsCommand(interaction) {
             { name: 'Total', value: totalDonationTickets.toString(), inline: true },
             { name: 'Abiertos', value: openDonationTickets.toString(), inline: true },
             { name: 'Cerrados', value: closedDonationTickets.toString(), inline: true },
-            { name: '📅 Hoy', value: `Soporte: ${ticketsToday} | Donaciones: ${donationTicketsToday}`, inline: false },
+            { name: '✅ Verificaciones', value: '\u200B', inline: false },
+            { name: 'Total', value: totalVerifications.toString(), inline: true },
+            { name: 'Hoy', value: verificationsToday.toString(), inline: true },
+            { name: 'Estado', value: config.features.enableVerificationSystem ? '🟢 Activo' : '🔴 Inactivo', inline: true },
+            { name: '📅 Actividad de Hoy', value: `Soporte: ${ticketsToday} | Donaciones: ${donationTicketsToday} | Verificaciones: ${verificationsToday}`, inline: false },
             { 
                 name: '⏰ Estado del Horario', 
                 value: config.settings.enableSchedule 
@@ -657,6 +956,9 @@ async function handleButtonInteraction(interaction) {
         case 'create_donation_ticket':
             await createDonationTicket(interaction);
             break;
+        case 'verify_user':
+            await verifyUser(interaction);
+            break;
         case 'close_ticket':
             await handleCloseTicket(interaction);
             break;
@@ -675,6 +977,118 @@ async function handleButtonInteraction(interaction) {
         case 'notify_donation_user':
             await handleNotifyDonationUser(interaction);
             break;
+    }
+}
+
+async function verifyUser(interaction) {
+    const member = interaction.member;
+    
+    // Verificar si ya está verificado
+    if (isVerified(member)) {
+        const alreadyVerifiedEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.warning)
+            .setTitle('⚠️ Ya Verificado')
+            .setDescription(config.messages.alreadyVerified)
+            .addFields([
+                { name: '✅ Estado', value: 'Ya tienes acceso completo al servidor', inline: true },
+                { name: '🎯 Rol', value: `<@&${config.roles.verifiedRoleId}>`, inline: true }
+            ])
+            .setTimestamp();
+        
+        return await interaction.reply({ embeds: [alreadyVerifiedEmbed], flags: MessageFlags.Ephemeral });
+    }
+    
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    
+    try {
+        // Dar el rol de verificado
+        await member.roles.add(config.roles.verifiedRoleId);
+        
+        // Registrar la verificación
+        const verificationId = `verification_${Date.now()}`;
+        verificationsDB[verificationId] = {
+            id: verificationId,
+            userId: interaction.user.id,
+            verifiedBy: 'self',
+            method: 'button',
+            timestamp: new Date().toISOString()
+        };
+        
+        saveData();
+        
+        // Embed de confirmación
+        const successEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.verification)
+            .setTitle('✅ Verificación Completada')
+            .setDescription(config.messages.verificationSuccess)
+            .addFields([
+                { name: '🎉 ¡Bienvenido!', value: 'Ahora tienes acceso completo a LastWayZ', inline: false },
+                { name: '🔓 Acceso Desbloqueado', value: 'Puedes ver todos los canales del servidor', inline: true },
+                { name: '🎯 Rol Asignado', value: `<@&${config.roles.verifiedRoleId}>`, inline: true },
+                { name: '📋 Siguiente Paso', value: 'Explora el servidor y diviértete', inline: false }
+            ])
+            .setThumbnail(interaction.user.displayAvatarURL())
+            .setFooter({ text: 'Gracias por verificarte en LastWayZ' })
+            .setTimestamp();
+        
+        await interaction.editReply({ embeds: [successEmbed] });
+        
+        // Log de verificación
+        const logChannel = client.channels.cache.get(config.channels.logChannelId);
+        if (logChannel) {
+            const logEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.verification)
+                .setTitle('🔐 Nueva Verificación')
+                .addFields([
+                    { name: 'Usuario', value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
+                    { name: 'Método', value: 'Auto-verificación (Botón)', inline: true },
+                    { name: 'Rol Asignado', value: `<@&${config.roles.verifiedRoleId}>`, inline: true },
+                    { name: 'Cuenta Creada', value: `<t:${Math.floor(interaction.user.createdTimestamp / 1000)}:R>`, inline: true },
+                    { name: 'Se Unió al Servidor', value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>`, inline: true },
+                    { name: 'Hora de Verificación', value: `<t:${Math.floor(Date.now() / 1000)}:f>`, inline: true }
+                ])
+                .setThumbnail(interaction.user.displayAvatarURL())
+                .setTimestamp();
+            
+            await logChannel.send({ embeds: [logEmbed] });
+        }
+        
+        // Notificación opcional de bienvenida por DM
+        if (config.features.enableWelcomeMessage) {
+            try {
+                const welcomeDMEmbed = new EmbedBuilder()
+                    .setColor(config.embeds.colors.verification)
+                    .setTitle('🎉 ¡Bienvenido a LastWayZ Roleplay!')
+                    .setDescription(`¡Hola ${interaction.user.username}! Te has verificado exitosamente.`)
+                    .addFields([
+                        { name: '🏆 Estado', value: 'Usuario Verificado', inline: true },
+                        { name: '🎮 Servidor', value: 'LastWayZ Roleplay', inline: true },
+                        { name: '📚 Recursos', value: 'Revisa las reglas y guías del servidor', inline: false },
+                        { name: '🤝 Soporte', value: 'Si necesitas ayuda, abre un ticket de soporte', inline: false }
+                    ])
+                    .setThumbnail(interaction.guild.iconURL())
+                    .setTimestamp();
+                
+                await interaction.user.send({ embeds: [welcomeDMEmbed] });
+            } catch (dmError) {
+                console.log(`No se pudo enviar mensaje de bienvenida a ${interaction.user.tag}:`, dmError.message);
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error verificando usuario:', error);
+        
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Error de Verificación')
+            .setDescription(config.messages.verificationError)
+            .addFields([
+                { name: '🔧 Solución', value: 'Contacta al staff para verificación manual', inline: false },
+                { name: '📞 Soporte', value: 'Abre un ticket si el problema persiste', inline: false }
+            ])
+            .setTimestamp();
+        
+        await interaction.editReply({ embeds: [errorEmbed] });
     }
 }
 
@@ -772,7 +1186,7 @@ async function createTicket(interaction) {
             messages: []
         };
         
-        saveTickets();
+        saveData();
         
         // Embed de bienvenida mejorado
         const welcomeEmbed = new EmbedBuilder()
@@ -930,7 +1344,7 @@ async function createDonationTicket(interaction) {
             messages: []
         };
         
-        saveTickets();
+        saveData();
         
         // Embed de bienvenida para donaciones
         const welcomeEmbed = new EmbedBuilder()
@@ -1409,7 +1823,7 @@ async function handleModalSubmit(interaction) {
 
 async function closeTicket(channel, closedBy, ticketData) {
     try {
-        // Verificar que el canal aún existe antes de proceder (CORREGIDO: cambié el nombre de la variable)
+        // Verificar que el canal aún existe antes de proceder
         const channelStillExists = await channelExists(channel.id);
         if (!channelStillExists) {
             console.log(`⚠️ El canal ${channel.id} ya no existe, omitiendo cierre.`);
@@ -1417,7 +1831,7 @@ async function closeTicket(channel, closedBy, ticketData) {
             ticketData.status = 'closed';
             ticketData.closedAt = new Date().toISOString();
             ticketData.closedBy = closedBy.id;
-            saveTickets();
+            saveData();
             return;
         }
 
@@ -1458,7 +1872,7 @@ async function closeTicket(channel, closedBy, ticketData) {
         ticketData.status = 'closed';
         ticketData.closedAt = new Date().toISOString();
         ticketData.closedBy = closedBy.id;
-        saveTickets();
+        saveData();
         
         // Log mejorado
         const logChannel = client.channels.cache.get(config.channels.logChannelId);
@@ -1483,7 +1897,7 @@ async function closeTicket(channel, closedBy, ticketData) {
         // Eliminar canal después del delay configurado con verificación adicional
         setTimeout(async () => {
             try {
-                // Verificar nuevamente que el canal existe antes de eliminarlo (CORREGIDO: cambié el nombre de la variable)
+                // Verificar nuevamente que el canal existe antes de eliminarlo
                 const stillExistsAtDeletion = await channelExists(channel.id);
                 if (stillExistsAtDeletion) {
                     const channelToDelete = await client.channels.fetch(channel.id);
@@ -1509,7 +1923,7 @@ async function closeTicket(channel, closedBy, ticketData) {
 
 async function closeDonationTicket(channel, closedBy, ticketData) {
     try {
-        // Verificar que el canal aún existe antes de proceder (CORREGIDO: mantuve el nombre correcto)
+        // Verificar que el canal aún existe antes de proceder
         const channelExistsCheck = await channelExists(channel.id);
         if (!channelExistsCheck) {
             console.log(`⚠️ El canal ${channel.id} ya no existe, omitiendo cierre.`);
@@ -1517,7 +1931,7 @@ async function closeDonationTicket(channel, closedBy, ticketData) {
             ticketData.status = 'closed';
             ticketData.closedAt = new Date().toISOString();
             ticketData.closedBy = closedBy.id;
-            saveTickets();
+            saveData();
             return;
         }
 
@@ -1558,7 +1972,7 @@ async function closeDonationTicket(channel, closedBy, ticketData) {
         ticketData.status = 'closed';
         ticketData.closedAt = new Date().toISOString();
         ticketData.closedBy = closedBy.id;
-        saveTickets();
+        saveData();
         
         // Log mejorado
         const logChannel = client.channels.cache.get(config.channels.logChannelId);
@@ -1583,7 +1997,7 @@ async function closeDonationTicket(channel, closedBy, ticketData) {
         // Eliminar canal después del delay configurado con verificación adicional
         setTimeout(async () => {
             try {
-                // Verificar nuevamente que el canal existe antes de eliminarlo (CORREGIDO: cambié el nombre de la variable)
+                // Verificar nuevamente que el canal existe antes de eliminarlo
                 const stillExistsAtDeletion = await channelExists(channel.id);
                 if (stillExistsAtDeletion) {
                     const channelToDelete = await client.channels.fetch(channel.id);
@@ -1634,14 +2048,14 @@ client.on('warn', (warning) => {
 // Manejo de señales del sistema para cierre graceful
 process.on('SIGINT', () => {
     console.log('🔄 Cerrando bot gracefully...');
-    saveTickets();
+    saveData();
     client.destroy();
     process.exit(0);
 });
 
 process.on('SIGTERM', () => {
     console.log('🔄 Cerrando bot gracefully...');
-    saveTickets();
+    saveData();
     client.destroy();
     process.exit(0);
 });
