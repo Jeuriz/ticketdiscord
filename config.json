@@ -1,19 +1,22 @@
 {
   "bot": {
     "token": "token",
-       "guildId": "1322641885436837958"
+   "guildId": "1322641885436837958"
   },
   "channels": {
     "categoryId": "1384076702522671144",
     "logChannelId": "1384077907567181874", 
     "ticketChannelId": "1384077246603460679",
     "donationsCategoryId": "1384355167717036093",
-    "donationsChannelId": "1384355233387515984"
+    "donationsChannelId": "1384355233387515984",
+    "verificationChannelId": "1322681516622348380"
+
   },
   "roles": {
     "supportRoleId": "1328709487887913021",
     "moderatorRoleId": "1328709487887913021",
-    "foundersRoleId": "1328709487887913021"
+    "foundersRoleId": "1328709487887913021",
+    "verifiedRoleId": "1322641885436837960"
   },
   "settings": {
     "enableSchedule": false,
@@ -42,16 +45,20 @@
     "errorGeneral": "❌ Ocurrió un error inesperado.",
     "transcriptSent": "📄 Transcript enviado por DM.",
     "memberAdded": "✅ Miembro agregado al ticket.",
-    "notificationSent": "🔔 Notificación enviada al usuario."
+    "notificationSent": "🔔 Notificación enviada al usuario.",
+    "alreadyVerified": "✅ Ya estás verificado.",
+    "verificationSuccess": "✅ Te has verificado exitosamente.",
+    "verificationError": "❌ Error durante la verificación."
   },
-  "embeds": {
+   "embeds": {
     "colors": {
       "primary": "#0099ff",
       "success": "#00ff00", 
       "warning": "#ffff00",
       "error": "#ff0000",
       "info": "#ff9900",
-      "donation": "#FFD700"
+      "donation": "#FFD700",
+      "verification": "#00D4AA"
     },
     "footer": "Sistema de Tickets v2.0",
     "enableThumbnails": true,
@@ -65,7 +72,9 @@
     "maxTicketsPerHour": 3,
     "enableWelcomeMessage": true,
     "enableFeedbackSystem": false,
-    "enableDonationSystem": true
+    "enableDonationSystem": true,
+    "enableVerificationSystem": true,
+    "enableVerificationLogs": true
   },
   "advanced": {
     "debugMode": false,
