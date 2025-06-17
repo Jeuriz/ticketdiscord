@@ -13,7 +13,8 @@ import {
     TextInputBuilder,
     TextInputStyle,
     REST,
-    Routes
+    Routes,
+    MessageFlags
 } from 'discord.js';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -79,6 +80,19 @@ function isWithinAllowedHours() {
     return currentHour >= config.settings.allowedHours.start && currentHour < config.settings.allowedHours.end;
 }
 
+// Verificar si un canal existe
+async function channelExists(channelId) {
+    try {
+        const channel = await client.channels.fetch(channelId);
+        return !!channel;
+    } catch (error) {
+        if (error.code === 10003) { // Unknown Channel
+            return false;
+        }
+        throw error;
+    }
+}
+
 // Generar transcript del canal
 async function generateTranscript(channel) {
     try {
@@ -138,11 +152,10 @@ function createTicketEmbed() {
                 inline: false
             }
         ])
-        .setImage('https://i.ibb.co/S4wHZHYt/ricket.png') // Cambia esta imagen por una que represente tu server
-        .setFooter({ text: '🧟 LastWayZ - Sistema de Tickets v2.0', iconURL: 'https://i.imgur.com/T1cZX1x.png' }) // Icono opcional
+        .setImage('https://i.ibb.co/S4wHZHYt/ricket.png')
+        .setFooter({ text: '🧟 LastWayZ - Sistema de Tickets v2.0', iconURL: 'https://i.imgur.com/T1cZX1x.png' })
         .setTimestamp();
 }
-
 
 // Crear botones para el ticket
 function createTicketButtons() {
@@ -268,9 +281,9 @@ client.on('interactionCreate', async (interaction) => {
             .setTimestamp();
 
         if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ embeds: [errorEmbed], ephemeral: true });
+            await interaction.followUp({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         } else {
-            await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+            await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
     }
 });
@@ -302,7 +315,7 @@ async function setupTicketsCommand(interaction) {
             .setDescription('No tienes permisos para usar este comando.')
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
     const embed = createTicketEmbed();
@@ -318,7 +331,7 @@ async function setupTicketsCommand(interaction) {
             .setDescription(`Sistema de tickets configurado correctamente en ${channel}.`)
             .setTimestamp();
         
-        await interaction.reply({ embeds: [successEmbed], ephemeral: true });
+        await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
     } else {
         const errorEmbed = new EmbedBuilder()
             .setColor(config.embeds.colors.error)
@@ -326,7 +339,7 @@ async function setupTicketsCommand(interaction) {
             .setDescription('No se pudo encontrar el canal configurado para tickets.')
             .setTimestamp();
         
-        await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
 }
 
@@ -338,7 +351,7 @@ async function forceCloseCommand(interaction) {
             .setDescription('No tienes permisos para usar este comando.')
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
     const channel = interaction.options.getChannel('canal') || interaction.channel;
@@ -351,7 +364,7 @@ async function forceCloseCommand(interaction) {
             .setDescription('Este no es un canal de ticket válido.')
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
     const processingEmbed = new EmbedBuilder()
@@ -360,7 +373,7 @@ async function forceCloseCommand(interaction) {
         .setDescription('Cerrando ticket y generando transcript...')
         .setTimestamp();
     
-    await interaction.reply({ embeds: [processingEmbed], ephemeral: true });
+    await interaction.reply({ embeds: [processingEmbed], flags: MessageFlags.Ephemeral });
     await closeTicket(channel, interaction.user, ticketData);
 }
 
@@ -372,7 +385,7 @@ async function ticketStatsCommand(interaction) {
             .setDescription('No tienes permisos para usar este comando.')
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
     const tickets = Object.values(ticketsDB);
@@ -411,7 +424,7 @@ async function ticketStatsCommand(interaction) {
         ])
         .setTimestamp();
     
-    await interaction.reply({ embeds: [statsEmbed], ephemeral: true });
+    await interaction.reply({ embeds: [statsEmbed], flags: MessageFlags.Ephemeral });
 }
 
 async function toggleScheduleCommand(interaction) {
@@ -422,7 +435,7 @@ async function toggleScheduleCommand(interaction) {
             .setDescription('Solo los administradores pueden cambiar la configuración de horarios.')
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
     const enabled = interaction.options.getBoolean('enabled');
@@ -443,7 +456,7 @@ async function toggleScheduleCommand(interaction) {
             .setDescription('No se pudo guardar la configuración. Contacta al desarrollador.')
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
     // Crear embed de confirmación
@@ -473,7 +486,7 @@ async function toggleScheduleCommand(interaction) {
         .setFooter({ text: 'Cambio aplicado inmediatamente' })
         .setTimestamp();
     
-    await interaction.reply({ embeds: [statusEmbed], ephemeral: true });
+    await interaction.reply({ embeds: [statusEmbed], flags: MessageFlags.Ephemeral });
     
     // Log del cambio
     const logChannel = client.channels.cache.get(config.channels.logChannelId);
@@ -528,7 +541,7 @@ async function createTicket(interaction) {
             .setDescription(`Ya tienes un ticket abierto: <#${existingTicket.channelId}>`)
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
     // Verificar horario (solo si está habilitado)
@@ -541,10 +554,10 @@ async function createTicket(interaction) {
                 .replace('{end}', config.settings.allowedHours.end))
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     
     try {
         const guild = interaction.guild;
@@ -689,7 +702,7 @@ async function handleCloseTicket(interaction) {
             .setDescription('Solo el staff puede cerrar tickets.')
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
     const ticketData = Object.values(ticketsDB).find(
@@ -703,7 +716,7 @@ async function handleCloseTicket(interaction) {
             .setDescription('Este no es un canal de ticket válido.')
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
     const processingEmbed = new EmbedBuilder()
@@ -712,7 +725,7 @@ async function handleCloseTicket(interaction) {
         .setDescription('Generando transcript y cerrando ticket...')
         .setTimestamp();
     
-    await interaction.reply({ embeds: [processingEmbed], ephemeral: true });
+    await interaction.reply({ embeds: [processingEmbed], flags: MessageFlags.Ephemeral });
     await closeTicket(interaction.channel, interaction.user, ticketData);
 }
 
@@ -724,7 +737,7 @@ async function handleAddMember(interaction) {
             .setDescription('Solo el staff puede agregar miembros.')
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
     const modal = new ModalBuilder()
@@ -752,7 +765,7 @@ async function handleNotifyUser(interaction) {
             .setDescription('Solo el staff puede enviar notificaciones.')
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
     const ticketData = Object.values(ticketsDB).find(
@@ -766,7 +779,7 @@ async function handleNotifyUser(interaction) {
             .setDescription('Este no es un canal de ticket válido.')
             .setTimestamp();
         
-        return await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
     
     try {
@@ -792,7 +805,7 @@ async function handleNotifyUser(interaction) {
             .setDescription(`Notificación enviada exitosamente a ${user.tag}`)
             .setTimestamp();
         
-        await interaction.reply({ embeds: [successEmbed], ephemeral: true });
+        await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
         
     } catch (error) {
         console.error('Error enviando notificación:', error);
@@ -803,7 +816,7 @@ async function handleNotifyUser(interaction) {
             .setDescription('No se pudo enviar la notificación al usuario. Es posible que tenga los DMs desactivados.')
             .setTimestamp();
         
-        await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
     }
 }
 
@@ -851,7 +864,7 @@ async function handleModalSubmit(interaction) {
                 .setDescription(`${user.tag} ha sido agregado al ticket exitosamente.`)
                 .setTimestamp();
             
-            await interaction.reply({ embeds: [successEmbed], ephemeral: true });
+            await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
             
             // Notificar en el canal
             const notificationEmbed = new EmbedBuilder()
@@ -870,13 +883,25 @@ async function handleModalSubmit(interaction) {
                 .setDescription('No se pudo agregar el usuario. Verifica que el ID o mención sea correcta.')
                 .setTimestamp();
             
-            await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+            await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
     }
 }
 
 async function closeTicket(channel, closedBy, ticketData) {
     try {
+        // Verificar que el canal aún existe antes de proceder
+        const channelExists = await channelExists(channel.id);
+        if (!channelExists) {
+            console.log(`⚠️ El canal ${channel.id} ya no existe, omitiendo cierre.`);
+            // Actualizar la base de datos para marcar como cerrado
+            ticketData.status = 'closed';
+            ticketData.closedAt = new Date().toISOString();
+            ticketData.closedBy = closedBy.id;
+            saveTickets();
+            return;
+        }
+
         // Generar transcript
         const transcript = await generateTranscript(channel);
         
@@ -935,12 +960,25 @@ async function closeTicket(channel, closedBy, ticketData) {
             await logChannel.send({ embeds: [logEmbed] });
         }
         
-        // Eliminar canal después del delay configurado
+        // Eliminar canal después del delay configurado con verificación adicional
         setTimeout(async () => {
             try {
-                await channel.delete('Ticket cerrado automáticamente');
+                // Verificar nuevamente que el canal existe antes de eliminarlo
+                const stillExists = await channelExists(channel.id);
+                if (stillExists) {
+                    const channelToDelete = await client.channels.fetch(channel.id);
+                    await channelToDelete.delete('Ticket cerrado automáticamente');
+                    console.log(`✅ Canal ${channel.name} eliminado exitosamente.`);
+                } else {
+                    console.log(`⚠️ El canal ${channel.id} ya no existe al momento de eliminación.`);
+                }
             } catch (error) {
-                console.error('Error eliminando canal:', error);
+                // Manejo específico para diferentes tipos de errores
+                if (error.code === 10003) {
+                    console.log(`ℹ️ El canal ${channel.id} ya fue eliminado anteriormente.`);
+                } else {
+                    console.error('Error eliminando canal:', error);
+                }
             }
         }, config.settings.deleteChannelDelay);
         
