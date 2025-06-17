@@ -45,7 +45,9 @@ const client = new Client({
 
 // Base de datos simple para tickets (en producción usar una BD real)
 let ticketsDB = {};
+let donationTicketsDB = {};
 const dbPath = join(__dirname, 'tickets.json');
+const donationDbPath = join(__dirname, 'donation_tickets.json');
 
 // Cargar tickets existentes
 function loadTickets() {
@@ -53,9 +55,13 @@ function loadTickets() {
         if (existsSync(dbPath)) {
             ticketsDB = JSON.parse(readFileSync(dbPath, 'utf8'));
         }
+        if (existsSync(donationDbPath)) {
+            donationTicketsDB = JSON.parse(readFileSync(donationDbPath, 'utf8'));
+        }
     } catch (error) {
         console.error('Error cargando tickets:', error);
         ticketsDB = {};
+        donationTicketsDB = {};
     }
 }
 
@@ -63,6 +69,7 @@ function loadTickets() {
 function saveTickets() {
     try {
         writeFileSync(dbPath, JSON.stringify(ticketsDB, null, 2));
+        writeFileSync(donationDbPath, JSON.stringify(donationTicketsDB, null, 2));
     } catch (error) {
         console.error('Error guardando tickets:', error);
     }
@@ -125,7 +132,7 @@ async function generateTranscript(channel) {
     }
 }
 
-// Crear embed de ticket
+// Crear embed de ticket normal
 function createTicketEmbed() {
     return new EmbedBuilder()
         .setColor(config.embeds.colors.primary)
@@ -157,7 +164,39 @@ function createTicketEmbed() {
         .setTimestamp();
 }
 
-// Crear botones para el ticket
+// Crear embed de donaciones
+function createDonationEmbed() {
+    return new EmbedBuilder()
+        .setColor(config.embeds.colors.donation)
+        .setTitle('💎 Donaciones LastWayZ Roleplay')
+        .setDescription(
+            '¡Gracias por considerar apoyar a **LastWayZ**!\n' +
+            'Haz clic en el botón de abajo para abrir un ticket de donación.\n\n' +
+            '💰 *Solo para consultas relacionadas con donaciones.*'
+        )
+        .addFields([
+            { 
+                name: '💳 Métodos de Pago', 
+                value: 'PayPal, Transferencia, Crypto, etc.', 
+                inline: true 
+            },
+            { 
+                name: '🎁 Beneficios', 
+                value: 'VIP, Items exclusivos, ventajas especiales', 
+                inline: true 
+            },
+            {
+                name: '⚠️ Importante',
+                value: 'Este canal es exclusivo para donaciones. Para soporte general usa el otro sistema.',
+                inline: false
+            }
+        ])
+        .setImage('https://i.ibb.co/4YXNn8w/donations.png')
+        .setFooter({ text: '💎 LastWayZ - Sistema de Donaciones v2.0', iconURL: 'https://i.imgur.com/T1cZX1x.png' })
+        .setTimestamp();
+}
+
+// Crear botones para el ticket normal
 function createTicketButtons() {
     return new ActionRowBuilder()
         .addComponents(
@@ -169,7 +208,19 @@ function createTicketButtons() {
         );
 }
 
-// Crear botones para gestión de ticket
+// Crear botones para donaciones
+function createDonationButtons() {
+    return new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('create_donation_ticket')
+                .setLabel('Solicitar Donación')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('💎')
+        );
+}
+
+// Crear botones para gestión de ticket normal
 function createTicketManageButtons() {
     return new ActionRowBuilder()
         .addComponents(
@@ -191,10 +242,38 @@ function createTicketManageButtons() {
         );
 }
 
+// Crear botones para gestión de ticket de donación
+function createDonationManageButtons() {
+    return new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('close_donation_ticket')
+                .setLabel('Cerrar Ticket')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🔒'),
+            new ButtonBuilder()
+                .setCustomId('add_founder')
+                .setLabel('Agregar Fundador')
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('👑'),
+            new ButtonBuilder()
+                .setCustomId('notify_donation_user')
+                .setLabel('Notificar Usuario')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('🔔')
+        );
+}
+
 // Verificar permisos de staff
 function isStaff(member) {
     return member.roles.cache.has(config.roles.supportRoleId) || 
            member.roles.cache.has(config.roles.moderatorRoleId) || 
+           member.permissions.has(PermissionFlagsBits.Administrator);
+}
+
+// Verificar permisos de fundador
+function isFounder(member) {
+    return member.roles.cache.has(config.roles.foundersRoleId) || 
            member.permissions.has(PermissionFlagsBits.Administrator);
 }
 
@@ -203,7 +282,12 @@ async function registerSlashCommands() {
     const commands = [
         new SlashCommandBuilder()
             .setName('setup-tickets')
-            .setDescription('Configura el sistema de tickets')
+            .setDescription('Configura el sistema de tickets de soporte')
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        
+        new SlashCommandBuilder()
+            .setName('setup-donations')
+            .setDescription('Configura el sistema de tickets de donaciones')
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         
         new SlashCommandBuilder()
@@ -295,6 +379,9 @@ async function handleSlashCommand(interaction) {
         case 'setup-tickets':
             await setupTicketsCommand(interaction);
             break;
+        case 'setup-donations':
+            await setupDonationsCommand(interaction);
+            break;
         case 'force-close':
             await forceCloseCommand(interaction);
             break;
@@ -327,8 +414,8 @@ async function setupTicketsCommand(interaction) {
         
         const successEmbed = new EmbedBuilder()
             .setColor(config.embeds.colors.success)
-            .setTitle('✅ Sistema Configurado')
-            .setDescription(`Sistema de tickets configurado correctamente en ${channel}.`)
+            .setTitle('✅ Sistema de Soporte Configurado')
+            .setDescription(`Sistema de tickets de soporte configurado correctamente en ${channel}.`)
             .setTimestamp();
         
         await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
@@ -336,7 +423,47 @@ async function setupTicketsCommand(interaction) {
         const errorEmbed = new EmbedBuilder()
             .setColor(config.embeds.colors.error)
             .setTitle('❌ Canal No Encontrado')
-            .setDescription('No se pudo encontrar el canal configurado para tickets.')
+            .setDescription('No se pudo encontrar el canal configurado para tickets de soporte.')
+            .setTimestamp();
+        
+        await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+    }
+}
+
+async function setupDonationsCommand(interaction) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Sin Permisos')
+            .setDescription('No tienes permisos para usar este comando.')
+            .setTimestamp();
+        
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+    }
+    
+    const embed = createDonationEmbed();
+    const buttons = createDonationButtons();
+    
+    const channel = client.channels.cache.get(config.channels.donationsChannelId);
+    if (channel) {
+        await channel.send({ embeds: [embed], components: [buttons] });
+        
+        const successEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.success)
+            .setTitle('✅ Sistema de Donaciones Configurado')
+            .setDescription(`Sistema de tickets de donaciones configurado correctamente en ${channel}.`)
+            .addFields([
+                { name: '👑 Acceso', value: 'Solo fundadores pueden ver estos tickets', inline: true },
+                { name: '🎯 Propósito', value: 'Exclusivo para consultas de donaciones', inline: true }
+            ])
+            .setTimestamp();
+        
+        await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
+    } else {
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Canal No Encontrado')
+            .setDescription('No se pudo encontrar el canal configurado para tickets de donaciones.')
             .setTimestamp();
         
         await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
@@ -344,7 +471,7 @@ async function setupTicketsCommand(interaction) {
 }
 
 async function forceCloseCommand(interaction) {
-    if (!isStaff(interaction.member)) {
+    if (!isStaff(interaction.member) && !isFounder(interaction.member)) {
         const errorEmbed = new EmbedBuilder()
             .setColor(config.embeds.colors.error)
             .setTitle('❌ Sin Permisos')
@@ -356,8 +483,9 @@ async function forceCloseCommand(interaction) {
     
     const channel = interaction.options.getChannel('canal') || interaction.channel;
     const ticketData = Object.values(ticketsDB).find(ticket => ticket.channelId === channel.id);
+    const donationTicketData = Object.values(donationTicketsDB).find(ticket => ticket.channelId === channel.id);
     
-    if (!ticketData) {
+    if (!ticketData && !donationTicketData) {
         const errorEmbed = new EmbedBuilder()
             .setColor(config.embeds.colors.error)
             .setTitle('❌ Ticket No Válido')
@@ -374,11 +502,16 @@ async function forceCloseCommand(interaction) {
         .setTimestamp();
     
     await interaction.reply({ embeds: [processingEmbed], flags: MessageFlags.Ephemeral });
-    await closeTicket(channel, interaction.user, ticketData);
+    
+    if (ticketData) {
+        await closeTicket(channel, interaction.user, ticketData);
+    } else {
+        await closeDonationTicket(channel, interaction.user, donationTicketData);
+    }
 }
 
 async function ticketStatsCommand(interaction) {
-    if (!isStaff(interaction.member)) {
+    if (!isStaff(interaction.member) && !isFounder(interaction.member)) {
         const errorEmbed = new EmbedBuilder()
             .setColor(config.embeds.colors.error)
             .setTitle('❌ Sin Permisos')
@@ -389,13 +522,22 @@ async function ticketStatsCommand(interaction) {
     }
     
     const tickets = Object.values(ticketsDB);
+    const donationTickets = Object.values(donationTicketsDB);
+    
     const openTickets = tickets.filter(ticket => ticket.status === 'open').length;
     const closedTickets = tickets.filter(ticket => ticket.status === 'closed').length;
     const totalTickets = tickets.length;
     
+    const openDonationTickets = donationTickets.filter(ticket => ticket.status === 'open').length;
+    const closedDonationTickets = donationTickets.filter(ticket => ticket.status === 'closed').length;
+    const totalDonationTickets = donationTickets.length;
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const ticketsToday = tickets.filter(ticket => 
+        new Date(ticket.createdAt) >= today
+    ).length;
+    const donationTicketsToday = donationTickets.filter(ticket => 
         new Date(ticket.createdAt) >= today
     ).length;
     
@@ -403,22 +545,20 @@ async function ticketStatsCommand(interaction) {
         .setColor(config.embeds.colors.info)
         .setTitle('📊 Estadísticas de Tickets')
         .addFields([
-            { name: '🎫 Total de Tickets', value: totalTickets.toString(), inline: true },
-            { name: '🟢 Tickets Abiertos', value: openTickets.toString(), inline: true },
-            { name: '🔴 Tickets Cerrados', value: closedTickets.toString(), inline: true },
-            { name: '📅 Tickets Hoy', value: ticketsToday.toString(), inline: true },
+            { name: '🎫 Tickets de Soporte', value: '\u200B', inline: false },
+            { name: 'Total', value: totalTickets.toString(), inline: true },
+            { name: 'Abiertos', value: openTickets.toString(), inline: true },
+            { name: 'Cerrados', value: closedTickets.toString(), inline: true },
+            { name: '💎 Tickets de Donaciones', value: '\u200B', inline: false },
+            { name: 'Total', value: totalDonationTickets.toString(), inline: true },
+            { name: 'Abiertos', value: openDonationTickets.toString(), inline: true },
+            { name: 'Cerrados', value: closedDonationTickets.toString(), inline: true },
+            { name: '📅 Hoy', value: `Soporte: ${ticketsToday} | Donaciones: ${donationTicketsToday}`, inline: false },
             { 
                 name: '⏰ Estado del Horario', 
                 value: config.settings.enableSchedule 
                     ? (isWithinAllowedHours() ? '✅ Abierto' : '❌ Cerrado')
                     : '🕒 24/7 Siempre Abierto', 
-                inline: true 
-            },
-            { 
-                name: config.settings.enableSchedule ? '🕒 Próxima Apertura' : '🔧 Configuración',
-                value: config.settings.enableSchedule 
-                    ? `${config.settings.allowedHours.start}:00`
-                    : 'Horarios deshabilitados', 
                 inline: true 
             }
         ])
@@ -514,14 +654,26 @@ async function handleButtonInteraction(interaction) {
         case 'create_ticket':
             await createTicket(interaction);
             break;
+        case 'create_donation_ticket':
+            await createDonationTicket(interaction);
+            break;
         case 'close_ticket':
             await handleCloseTicket(interaction);
+            break;
+        case 'close_donation_ticket':
+            await handleCloseDonationTicket(interaction);
             break;
         case 'add_member':
             await handleAddMember(interaction);
             break;
+        case 'add_founder':
+            await handleAddFounder(interaction);
+            break;
         case 'notify_user':
             await handleNotifyUser(interaction);
+            break;
+        case 'notify_donation_user':
+            await handleNotifyDonationUser(interaction);
             break;
     }
 }
@@ -625,8 +777,8 @@ async function createTicket(interaction) {
         // Embed de bienvenida mejorado
         const welcomeEmbed = new EmbedBuilder()
             .setColor(config.embeds.colors.success)
-            .setTitle('🎫 Ticket Creado Exitosamente')
-            .setDescription(`¡Hola ${interaction.user}! Tu ticket ha sido creado.`)
+            .setTitle('🎫 Ticket de Soporte Creado')
+            .setDescription(`¡Hola ${interaction.user}! Tu ticket de soporte ha sido creado.`)
             .addFields([
                 { 
                     name: '📝 Instrucciones', 
@@ -644,7 +796,7 @@ async function createTicket(interaction) {
                     inline: true 
                 }
             ])
-            .setFooter({ text: `Ticket ID: ${ticketId} | Sistema v2.0` })
+            .setFooter({ text: `Ticket ID: ${ticketId} | Sistema de Soporte v2.0` })
             .setTimestamp();
         
         const manageButtons = createTicketManageButtons();
@@ -658,7 +810,7 @@ async function createTicket(interaction) {
         const successEmbed = new EmbedBuilder()
             .setColor(config.embeds.colors.success)
             .setTitle('✅ Ticket Creado')
-            .setDescription(`Tu ticket ha sido creado: ${ticketChannel}`)
+            .setDescription(`Tu ticket de soporte ha sido creado: ${ticketChannel}`)
             .setTimestamp();
         
         await interaction.editReply({ embeds: [successEmbed] });
@@ -668,11 +820,12 @@ async function createTicket(interaction) {
         if (logChannel) {
             const logEmbed = new EmbedBuilder()
                 .setColor(config.embeds.colors.info)
-                .setTitle('📊 Nuevo Ticket Creado')
+                .setTitle('📊 Nuevo Ticket de Soporte')
                 .addFields([
                     { name: 'Usuario', value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
                     { name: 'Canal', value: `${ticketChannel}`, inline: true },
                     { name: 'Ticket ID', value: ticketId, inline: true },
+                    { name: 'Tipo', value: 'Soporte General', inline: true },
                     { name: 'Hora', value: new Date().toLocaleString(), inline: false }
                 ])
                 .setThumbnail(interaction.user.displayAvatarURL())
@@ -688,6 +841,169 @@ async function createTicket(interaction) {
             .setColor(config.embeds.colors.error)
             .setTitle('❌ Error al Crear Ticket')
             .setDescription('Hubo un error creando tu ticket. Por favor intenta de nuevo.')
+            .setTimestamp();
+        
+        await interaction.editReply({ embeds: [errorEmbed] });
+    }
+}
+
+async function createDonationTicket(interaction) {
+    const userId = interaction.user.id;
+    
+    // Verificar si ya tiene un ticket de donación abierto
+    const existingDonationTicket = Object.values(donationTicketsDB).find(
+        ticket => ticket.userId === userId && ticket.status === 'open'
+    );
+    
+    if (existingDonationTicket) {
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Ticket de Donación Existente')
+            .setDescription(`Ya tienes un ticket de donación abierto: <#${existingDonationTicket.channelId}>`)
+            .setTimestamp();
+        
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+    }
+    
+    // Verificar horario (solo si está habilitado)
+    if (config.settings.enableSchedule && !isWithinAllowedHours()) {
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Fuera de Horario')
+            .setDescription(config.messages.outsideHours
+                .replace('{start}', config.settings.allowedHours.start)
+                .replace('{end}', config.settings.allowedHours.end))
+            .setTimestamp();
+        
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+    }
+    
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    
+    try {
+        const guild = interaction.guild;
+        const category = guild.channels.cache.get(config.channels.donationsCategoryId);
+        
+        // Crear canal del ticket con permisos solo para fundadores
+        const ticketChannel = await guild.channels.create({
+            name: `donacion-${interaction.user.username}`,
+            type: ChannelType.GuildText,
+            parent: category,
+            permissionOverwrites: [
+                {
+                    id: guild.id,
+                    deny: [PermissionFlagsBits.ViewChannel]
+                },
+                {
+                    id: interaction.user.id,
+                    allow: [
+                        PermissionFlagsBits.ViewChannel,
+                        PermissionFlagsBits.SendMessages,
+                        PermissionFlagsBits.ReadMessageHistory,
+                        PermissionFlagsBits.AttachFiles,
+                        PermissionFlagsBits.EmbedLinks
+                    ]
+                },
+                {
+                    id: config.roles.foundersRoleId,
+                    allow: [
+                        PermissionFlagsBits.ViewChannel,
+                        PermissionFlagsBits.SendMessages,
+                        PermissionFlagsBits.ReadMessageHistory,
+                        PermissionFlagsBits.ManageMessages,
+                        PermissionFlagsBits.ManageChannels,
+                        PermissionFlagsBits.AttachFiles,
+                        PermissionFlagsBits.EmbedLinks
+                    ]
+                }
+            ]
+        });
+        
+        // Crear registro del ticket de donación
+        const ticketId = `donation_${Date.now()}`;
+        donationTicketsDB[ticketId] = {
+            id: ticketId,
+            userId: interaction.user.id,
+            channelId: ticketChannel.id,
+            status: 'open',
+            createdAt: new Date().toISOString(),
+            messages: []
+        };
+        
+        saveTickets();
+        
+        // Embed de bienvenida para donaciones
+        const welcomeEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.donation)
+            .setTitle('💎 Ticket de Donación Creado')
+            .setDescription(`¡Hola ${interaction.user}! Gracias por tu interés en apoyar LastWayZ.`)
+            .addFields([
+                { 
+                    name: '💰 Información Necesaria', 
+                    value: 'Por favor proporciona:\n• Monto que deseas donar\n• Método de pago preferido\n• Beneficios que te interesan', 
+                    inline: false 
+                },
+                { 
+                    name: '👑 Atención Exclusiva', 
+                    value: 'Solo los fundadores pueden ver este ticket.', 
+                    inline: true 
+                },
+                { 
+                    name: '⚡ Respuesta Rápida', 
+                    value: 'Los fundadores responden pronto.', 
+                    inline: true 
+                }
+            ])
+            .setFooter({ text: `Ticket ID: ${ticketId} | Sistema de Donaciones v2.0` })
+            .setTimestamp();
+        
+        const manageButtons = createDonationManageButtons();
+        
+        await ticketChannel.send({
+            content: `${interaction.user} <@&${config.roles.foundersRoleId}>`,
+            embeds: [welcomeEmbed],
+            components: [manageButtons]
+        });
+        
+        const successEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.donation)
+            .setTitle('✅ Ticket de Donación Creado')
+            .setDescription(`Tu ticket de donación ha sido creado: ${ticketChannel}`)
+            .addFields([
+                { name: '👑 Acceso', value: 'Solo fundadores pueden ver este ticket', inline: true },
+                { name: '🔒 Privacidad', value: 'Tu información está protegida', inline: true }
+            ])
+            .setTimestamp();
+        
+        await interaction.editReply({ embeds: [successEmbed] });
+        
+        // Log mejorado
+        const logChannel = client.channels.cache.get(config.channels.logChannelId);
+        if (logChannel) {
+            const logEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.donation)
+                .setTitle('💎 Nuevo Ticket de Donación')
+                .addFields([
+                    { name: 'Usuario', value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
+                    { name: 'Canal', value: `${ticketChannel}`, inline: true },
+                    { name: 'Ticket ID', value: ticketId, inline: true },
+                    { name: 'Tipo', value: 'Donación 💎', inline: true },
+                    { name: 'Acceso', value: 'Solo Fundadores 👑', inline: true },
+                    { name: 'Hora', value: new Date().toLocaleString(), inline: false }
+                ])
+                .setThumbnail(interaction.user.displayAvatarURL())
+                .setTimestamp();
+            
+            await logChannel.send({ embeds: [logEmbed] });
+        }
+        
+    } catch (error) {
+        console.error('Error creando ticket de donación:', error);
+        
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Error al Crear Ticket de Donación')
+            .setDescription('Hubo un error creando tu ticket de donación. Por favor intenta de nuevo.')
             .setTimestamp();
         
         await interaction.editReply({ embeds: [errorEmbed] });
@@ -729,6 +1045,41 @@ async function handleCloseTicket(interaction) {
     await closeTicket(interaction.channel, interaction.user, ticketData);
 }
 
+async function handleCloseDonationTicket(interaction) {
+    if (!isFounder(interaction.member)) {
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Sin Permisos')
+            .setDescription('Solo los fundadores pueden cerrar tickets de donaciones.')
+            .setTimestamp();
+        
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+    }
+    
+    const ticketData = Object.values(donationTicketsDB).find(
+        ticket => ticket.channelId === interaction.channel.id
+    );
+    
+    if (!ticketData) {
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Ticket No Válido')
+            .setDescription('Este no es un canal de ticket de donación válido.')
+            .setTimestamp();
+        
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+    }
+    
+    const processingEmbed = new EmbedBuilder()
+        .setColor(config.embeds.colors.warning)
+        .setTitle('🔄 Cerrando Ticket de Donación')
+        .setDescription('Generando transcript y cerrando ticket...')
+        .setTimestamp();
+    
+    await interaction.reply({ embeds: [processingEmbed], flags: MessageFlags.Ephemeral });
+    await closeDonationTicket(interaction.channel, interaction.user, ticketData);
+}
+
 async function handleAddMember(interaction) {
     if (!isStaff(interaction.member)) {
         const errorEmbed = new EmbedBuilder()
@@ -749,6 +1100,34 @@ async function handleAddMember(interaction) {
         .setLabel('ID o Mención del Usuario')
         .setStyle(TextInputStyle.Short)
         .setPlaceholder('Ejemplo: 123456789012345678 o @usuario')
+        .setRequired(true);
+    
+    const firstActionRow = new ActionRowBuilder().addComponents(userInput);
+    modal.addComponents(firstActionRow);
+    
+    await interaction.showModal(modal);
+}
+
+async function handleAddFounder(interaction) {
+    if (!isFounder(interaction.member)) {
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Sin Permisos')
+            .setDescription('Solo los fundadores pueden agregar otros fundadores.')
+            .setTimestamp();
+        
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+    }
+    
+    const modal = new ModalBuilder()
+        .setCustomId('add_founder_modal')
+        .setTitle('Agregar Fundador al Ticket');
+    
+    const userInput = new TextInputBuilder()
+        .setCustomId('founder_input')
+        .setLabel('ID o Mención del Fundador')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Ejemplo: 123456789012345678 o @fundador')
         .setRequired(true);
     
     const firstActionRow = new ActionRowBuilder().addComponents(userInput);
@@ -792,6 +1171,69 @@ async function handleNotifyUser(interaction) {
             .addFields([
                 { name: 'Canal del Ticket', value: `<#${interaction.channel.id}>`, inline: true },
                 { name: 'Solicitado por', value: interaction.user.tag, inline: true },
+                { name: 'Hora', value: new Date().toLocaleString(), inline: true }
+            ])
+            .setThumbnail(interaction.guild.iconURL())
+            .setTimestamp();
+        
+        await user.send({ embeds: [notifyEmbed] });
+        
+        const successEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.success)
+            .setTitle('✅ Notificación Enviada')
+            .setDescription(`Notificación enviada exitosamente a ${user.tag}`)
+            .setTimestamp();
+        
+        await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
+        
+    } catch (error) {
+        console.error('Error enviando notificación:', error);
+        
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Error al Notificar')
+            .setDescription('No se pudo enviar la notificación al usuario. Es posible que tenga los DMs desactivados.')
+            .setTimestamp();
+        
+        await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+    }
+}
+
+async function handleNotifyDonationUser(interaction) {
+    if (!isFounder(interaction.member)) {
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Sin Permisos')
+            .setDescription('Solo los fundadores pueden enviar notificaciones.')
+            .setTimestamp();
+        
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+    }
+    
+    const ticketData = Object.values(donationTicketsDB).find(
+        ticket => ticket.channelId === interaction.channel.id
+    );
+    
+    if (!ticketData) {
+        const errorEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.error)
+            .setTitle('❌ Ticket No Válido')
+            .setDescription('Este no es un canal de ticket de donación válido.')
+            .setTimestamp();
+        
+        return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+    }
+    
+    try {
+        const user = await client.users.fetch(ticketData.userId);
+        
+        const notifyEmbed = new EmbedBuilder()
+            .setColor(config.embeds.colors.donation)
+            .setTitle('💎 Respuesta Requerida en tu Ticket de Donación')
+            .setDescription(`Hola ${user.username}, un fundador necesita que respondas en tu ticket de donación.`)
+            .addFields([
+                { name: 'Canal del Ticket', value: `<#${interaction.channel.id}>`, inline: true },
+                { name: 'Solicitado por', value: `👑 ${interaction.user.tag}`, inline: true },
                 { name: 'Hora', value: new Date().toLocaleString(), inline: true }
             ])
             .setThumbnail(interaction.guild.iconURL())
@@ -885,6 +1327,83 @@ async function handleModalSubmit(interaction) {
             
             await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
+    } else if (interaction.customId === 'add_founder_modal') {
+        const userInput = interaction.fields.getTextInputValue('founder_input');
+        
+        try {
+            // Extraer ID del usuario
+            let userId = userInput.replace(/[<@!>]/g, '');
+            
+            const user = await client.users.fetch(userId);
+            let member;
+            
+            try {
+                member = await interaction.guild.members.fetch(userId);
+            } catch (error) {
+                console.log('No se pudo obtener información completa del miembro');
+            }
+            
+            // Verificar que el usuario tenga el rol de fundador
+            if (member && !member.roles.cache.has(config.roles.foundersRoleId) && !member.permissions.has(PermissionFlagsBits.Administrator)) {
+                const errorEmbed = new EmbedBuilder()
+                    .setColor(config.embeds.colors.error)
+                    .setTitle('❌ Sin Rol de Fundador')
+                    .setDescription('Este usuario no tiene el rol de fundador.')
+                    .setTimestamp();
+                
+                return await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+            }
+            
+            // Agregar permisos al canal
+            if (member) {
+                await interaction.channel.permissionOverwrites.edit(member, {
+                    ViewChannel: true,
+                    SendMessages: true,
+                    ReadMessageHistory: true,
+                    ManageMessages: true,
+                    ManageChannels: true,
+                    AttachFiles: true,
+                    EmbedLinks: true
+                });
+            } else {
+                await interaction.channel.permissionOverwrites.edit(userId, {
+                    ViewChannel: true,
+                    SendMessages: true,
+                    ReadMessageHistory: true,
+                    ManageMessages: true,
+                    ManageChannels: true,
+                    AttachFiles: true,
+                    EmbedLinks: true
+                });
+            }
+            
+            const successEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.donation)
+                .setTitle('✅ Fundador Agregado')
+                .setDescription(`👑 ${user.tag} ha sido agregado al ticket de donación exitosamente.`)
+                .setTimestamp();
+            
+            await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
+            
+            // Notificar en el canal
+            const notificationEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.donation)
+                .setDescription(`👑 ${user} ha sido agregado al ticket por ${interaction.user}`)
+                .setTimestamp();
+            
+            await interaction.channel.send({ embeds: [notificationEmbed] });
+            
+        } catch (error) {
+            console.error('Error agregando fundador:', error);
+            
+            const errorEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.error)
+                .setTitle('❌ Error al Agregar Fundador')
+                .setDescription('No se pudo agregar el fundador. Verifica que el ID o mención sea correcta.')
+                .setTimestamp();
+            
+            await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
+        }
     }
 }
 
@@ -910,8 +1429,8 @@ async function closeTicket(channel, closedBy, ticketData) {
         if (user) {
             const transcriptEmbed = new EmbedBuilder()
                 .setColor(config.embeds.colors.warning)
-                .setTitle('🎫 Ticket Cerrado')
-                .setDescription('Tu ticket ha sido cerrado. Aquí tienes el transcript de la conversación.')
+                .setTitle('🎫 Ticket de Soporte Cerrado')
+                .setDescription('Tu ticket de soporte ha sido cerrado. Aquí tienes el transcript de la conversación.')
                 .addFields([
                     { name: 'Cerrado por', value: closedBy.tag, inline: true },
                     { name: 'Fecha de cierre', value: new Date().toLocaleString(), inline: true },
@@ -927,7 +1446,7 @@ async function closeTicket(channel, closedBy, ticketData) {
                     embeds: [transcriptEmbed],
                     files: [{
                         attachment: transcriptBuffer,
-                        name: `transcript-${channel.name}.txt`
+                        name: `transcript-soporte-${channel.name}.txt`
                     }]
                 });
             } catch (dmError) {
@@ -946,12 +1465,13 @@ async function closeTicket(channel, closedBy, ticketData) {
         if (logChannel) {
             const logEmbed = new EmbedBuilder()
                 .setColor(config.embeds.colors.error)
-                .setTitle('🔒 Ticket Cerrado')
+                .setTitle('🔒 Ticket de Soporte Cerrado')
                 .addFields([
                     { name: 'Ticket', value: channel.name, inline: true },
                     { name: 'Usuario', value: `<@${ticketData.userId}>`, inline: true },
                     { name: 'Cerrado por', value: closedBy.tag, inline: true },
                     { name: 'Duración', value: calculateTicketDuration(ticketData.createdAt), inline: true },
+                    { name: 'Tipo', value: 'Soporte General', inline: true },
                     { name: 'Transcript', value: 'Enviado por DM al usuario', inline: true }
                 ])
                 .setThumbnail(closedBy.displayAvatarURL())
@@ -967,8 +1487,8 @@ async function closeTicket(channel, closedBy, ticketData) {
                 const stillExists = await channelExists(channel.id);
                 if (stillExists) {
                     const channelToDelete = await client.channels.fetch(channel.id);
-                    await channelToDelete.delete('Ticket cerrado automáticamente');
-                    console.log(`✅ Canal ${channel.name} eliminado exitosamente.`);
+                    await channelToDelete.delete('Ticket de soporte cerrado automáticamente');
+                    console.log(`✅ Canal de soporte ${channel.name} eliminado exitosamente.`);
                 } else {
                     console.log(`⚠️ El canal ${channel.id} ya no existe al momento de eliminación.`);
                 }
@@ -983,7 +1503,107 @@ async function closeTicket(channel, closedBy, ticketData) {
         }, config.settings.deleteChannelDelay);
         
     } catch (error) {
-        console.error('Error cerrando ticket:', error);
+        console.error('Error cerrando ticket de soporte:', error);
+    }
+}
+
+async function closeDonationTicket(channel, closedBy, ticketData) {
+    try {
+        // Verificar que el canal aún existe antes de proceder
+        const channelExistsCheck = await channelExists(channel.id);
+        if (!channelExistsCheck) {
+            console.log(`⚠️ El canal ${channel.id} ya no existe, omitiendo cierre.`);
+            // Actualizar la base de datos para marcar como cerrado
+            ticketData.status = 'closed';
+            ticketData.closedAt = new Date().toISOString();
+            ticketData.closedBy = closedBy.id;
+            saveTickets();
+            return;
+        }
+
+        // Generar transcript
+        const transcript = await generateTranscript(channel);
+        
+        // Enviar transcript al usuario
+        const user = await client.users.fetch(ticketData.userId);
+        if (user) {
+            const transcriptEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.donation)
+                .setTitle('💎 Ticket de Donación Cerrado')
+                .setDescription('Tu ticket de donación ha sido cerrado. Aquí tienes el transcript de la conversación.')
+                .addFields([
+                    { name: 'Cerrado por', value: `👑 ${closedBy.tag}`, inline: true },
+                    { name: 'Fecha de cierre', value: new Date().toLocaleString(), inline: true },
+                    { name: 'Duración', value: calculateTicketDuration(ticketData.createdAt), inline: true }
+                ])
+                .setThumbnail(closedBy.displayAvatarURL())
+                .setTimestamp();
+            
+            const transcriptBuffer = Buffer.from(transcript, 'utf-8');
+            
+            try {
+                await user.send({
+                    embeds: [transcriptEmbed],
+                    files: [{
+                        attachment: transcriptBuffer,
+                        name: `transcript-donacion-${channel.name}.txt`
+                    }]
+                });
+            } catch (dmError) {
+                console.log(`No se pudo enviar DM a ${user.tag}:`, dmError.message);
+            }
+        }
+        
+        // Actualizar base de datos
+        ticketData.status = 'closed';
+        ticketData.closedAt = new Date().toISOString();
+        ticketData.closedBy = closedBy.id;
+        saveTickets();
+        
+        // Log mejorado
+        const logChannel = client.channels.cache.get(config.channels.logChannelId);
+        if (logChannel) {
+            const logEmbed = new EmbedBuilder()
+                .setColor(config.embeds.colors.donation)
+                .setTitle('💎 Ticket de Donación Cerrado')
+                .addFields([
+                    { name: 'Ticket', value: channel.name, inline: true },
+                    { name: 'Usuario', value: `<@${ticketData.userId}>`, inline: true },
+                    { name: 'Cerrado por', value: `👑 ${closedBy.tag}`, inline: true },
+                    { name: 'Duración', value: calculateTicketDuration(ticketData.createdAt), inline: true },
+                    { name: 'Tipo', value: 'Donación 💎', inline: true },
+                    { name: 'Transcript', value: 'Enviado por DM al usuario', inline: true }
+                ])
+                .setThumbnail(closedBy.displayAvatarURL())
+                .setTimestamp();
+            
+            await logChannel.send({ embeds: [logEmbed] });
+        }
+        
+        // Eliminar canal después del delay configurado con verificación adicional
+        setTimeout(async () => {
+            try {
+                // Verificar nuevamente que el canal existe antes de eliminarlo
+                const stillExists = await channelExists(channel.id);
+                if (stillExists) {
+                    const channelToDelete = await client.channels.fetch(channel.id);
+                    await channelToDelete.delete('Ticket de donación cerrado automáticamente');
+                    console.log(`✅ Canal de donación ${channel.name} eliminado exitosamente.`);
+                } else {
+                    console.log(`⚠️ El canal ${channel.id} ya no existe al momento de eliminación.`);
+                }
+            } catch (error) {
+                // Manejo específico para diferentes tipos de errores
+                if (error.code === 10003) {
+                    console.log(`ℹ️ El canal ${channel.id} ya fue eliminado anteriormente.`);
+                } else {
+                    console.error('Error eliminando canal:', error);
+                }
+            }
+        }, config.settings.deleteChannelDelay);
+        
+    } catch (error) {
+        console.error('Error cerrando ticket de donación:', error);
     }
 }
 
