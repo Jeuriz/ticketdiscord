@@ -1409,9 +1409,9 @@ async function handleModalSubmit(interaction) {
 
 async function closeTicket(channel, closedBy, ticketData) {
     try {
-        // Verificar que el canal aún existe antes de proceder
-        const channelExists = await channelExists(channel.id);
-        if (!channelExists) {
+        // Verificar que el canal aún existe antes de proceder (CORREGIDO: cambié el nombre de la variable)
+        const channelStillExists = await channelExists(channel.id);
+        if (!channelStillExists) {
             console.log(`⚠️ El canal ${channel.id} ya no existe, omitiendo cierre.`);
             // Actualizar la base de datos para marcar como cerrado
             ticketData.status = 'closed';
@@ -1483,9 +1483,9 @@ async function closeTicket(channel, closedBy, ticketData) {
         // Eliminar canal después del delay configurado con verificación adicional
         setTimeout(async () => {
             try {
-                // Verificar nuevamente que el canal existe antes de eliminarlo
-                const stillExists = await channelExists(channel.id);
-                if (stillExists) {
+                // Verificar nuevamente que el canal existe antes de eliminarlo (CORREGIDO: cambié el nombre de la variable)
+                const stillExistsAtDeletion = await channelExists(channel.id);
+                if (stillExistsAtDeletion) {
                     const channelToDelete = await client.channels.fetch(channel.id);
                     await channelToDelete.delete('Ticket de soporte cerrado automáticamente');
                     console.log(`✅ Canal de soporte ${channel.name} eliminado exitosamente.`);
@@ -1509,7 +1509,7 @@ async function closeTicket(channel, closedBy, ticketData) {
 
 async function closeDonationTicket(channel, closedBy, ticketData) {
     try {
-        // Verificar que el canal aún existe antes de proceder
+        // Verificar que el canal aún existe antes de proceder (CORREGIDO: mantuve el nombre correcto)
         const channelExistsCheck = await channelExists(channel.id);
         if (!channelExistsCheck) {
             console.log(`⚠️ El canal ${channel.id} ya no existe, omitiendo cierre.`);
@@ -1583,9 +1583,9 @@ async function closeDonationTicket(channel, closedBy, ticketData) {
         // Eliminar canal después del delay configurado con verificación adicional
         setTimeout(async () => {
             try {
-                // Verificar nuevamente que el canal existe antes de eliminarlo
-                const stillExists = await channelExists(channel.id);
-                if (stillExists) {
+                // Verificar nuevamente que el canal existe antes de eliminarlo (CORREGIDO: cambié el nombre de la variable)
+                const stillExistsAtDeletion = await channelExists(channel.id);
+                if (stillExistsAtDeletion) {
                     const channelToDelete = await client.channels.fetch(channel.id);
                     await channelToDelete.delete('Ticket de donación cerrado automáticamente');
                     console.log(`✅ Canal de donación ${channel.name} eliminado exitosamente.`);
